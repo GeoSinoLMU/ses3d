@@ -1,7 +1,5 @@
-
 !*****************************************************************************
 !************** main program for spherical spectral elements *****************
-! last modified: 16 April 2014 by Andreas Fichtner
 !*****************************************************************************
 
 program ses3d_main
@@ -10,196 +8,203 @@ use variables
 implicit none
 include 'mpif.h'
 
-   	character(len=8) :: date1,date2
-	character(len=10) :: time1,time2
-	character(len=20) :: dummy
-	real :: vx_max, vx_min
+    character(len=8) :: date1,date2
+    character(len=10) :: time1,time2
+    character(len=20) :: dummy
+    real :: vx_max, vx_min
 
-	!======================================================================
-	! initialisations
-	!======================================================================
+    !======================================================================
+    ! initialisations
+    !======================================================================
 
-	call mpi_init(ierr)
-	call mpi_comm_rank(mpi_comm_world, my_rank, ierr)
-	call mpi_comm_size(mpi_comm_world, p, ierr)
+    call mpi_init(ierr)
+    call mpi_comm_rank(mpi_comm_world, my_rank, ierr)
+    call mpi_comm_size(mpi_comm_world, p, ierr)
 
-	!======================================================================
-	! read master Par_master file and communicate content
-	!======================================================================
+    !======================================================================
+    ! read master Par_master file and communicate content
+    !======================================================================
 
-	if (my_rank==0) then
-		
-		!- Create the logfile directory if it does not exist.
-      	call system('mkdir -p ../DATA/LOGFILES')
+    if (my_rank==0) then
+        
+        !- Create the logfile directory if it does not exist.
+        call system('mkdir -p ../DATA/LOGFILES')
 
-	  	open(unit=99,file='../INPUT/event_list',action='read')
+        open(unit=99,file='../INPUT/event_list',action='read')
 
-	  	read(99,*) n_events
+        read(99,*) n_events
 
-	  	do it=1,n_events
-	    	read(99,*) event_indices(it)
-	  	  enddo
+        do it=1,n_events
+            read(99,*) event_indices(it)
+        enddo
 
-	  	close(unit=99)
+        close(unit=99)
 
-	endif
+    endif
 
-	call mpi_bcast(n_events,1,mpi_integer,0,mpi_comm_world,ierr)
-	call mpi_bcast(event_indices,1000,mpi_character,0,mpi_comm_world,ierr)
+    call mpi_bcast(n_events,1,mpi_integer,0,mpi_comm_world,ierr)
+    call mpi_bcast(event_indices,64*1000,mpi_character,0,mpi_comm_world,ierr)
 
-	!======================================================================
-	! open and write logfile
-	!======================================================================
+    !======================================================================
+    ! open and write logfile
+    !======================================================================
 
-	call int2str(my_rank, dummy)
+    call int2str(my_rank, dummy)
 
-	open(unit=99, file='../DATA/LOGFILES/logfile'//dummy(1:len_trim(dummy)), action='WRITE')
+    open(unit=99, file='../DATA/LOGFILES/logfile'//dummy(1:len_trim(dummy)), action='WRITE')
 
-	write(99,*) '---------------------------------------'
-	write(99,*) 'logfile process ', my_rank
-	write(99,*) '---------------------------------------'
+    write(99,*) '---------------------------------------'
+    write(99,*) 'logfile process ', my_rank
+    write(99,*) '---------------------------------------'
 
-	if (my_rank==0) then
+    if (my_rank==0) then
 
-		call date_and_time(date1, time1)
+        call date_and_time(date1, time1)
 
-		write(*,*) '------------------------------------------------------------------'
-		write(*,*) 'starting date: ', date1(7:8), '. ', date1(5:6), '. ', date1(5:5), date1(4:4)
-		write(*,*) 'starting time: ', time1(1:2), ':', time1(3:4), ',', time1(5:6)
-		write(*,*) '------------------------------------------------------------------'
+        write(*,*) '------------------------------------------------------------------'
+        write(*,*) 'starting date: ', date1(7:8), '. ', date1(5:6), '. ', date1(5:5), date1(4:4)
+        write(*,*) 'starting time: ', time1(1:2), ':', time1(3:4), ',', time1(5:6)
+        write(*,*) '------------------------------------------------------------------'
 
-	endif
+    endif
 
-	!======================================================================
-	! start loop over events
-	!======================================================================
+    !======================================================================
+    ! start loop over events
+    !======================================================================
 
-	do i_events=1,n_events
+    do i_events=1,n_events
 
-	    !======================================================================
-	    ! read parameters from files 'Par' and 'recfile' and 'boxfile
-	    !======================================================================
+        !======================================================================
+        ! read parameters from files 'Par' and 'recfile' and 'boxfile
+        !======================================================================
 
-	    call ses3d_input
+        call ses3d_input
 
-	    !======================================================================
-	    ! various initializations (model space, source, receivers, boundaries)
-	    !======================================================================
+        !======================================================================
+        ! various initializations (model space, source, receivers, boundaries)
+        !======================================================================
 
-	    call ses3d_init
+        call ses3d_init
 
-	    !======================================================================
-	    ! start time evolution
-	    !======================================================================
+        !======================================================================
+        ! start time evolution
+        !======================================================================
 
-	    do it=1,nt
+        do it=1,nt
 
-		!==============================================================
-		! forward time stepping
-		!==============================================================
+            if ((PML_LIMIT>=0) .and. (it>PML_LIMIT)) then
+                ispml = 0.0
+            endif
 
-		write(99,*) "iteration", it, "ispml=", ispml
+            !==============================================================
+            ! forward time stepping
+            !==============================================================
 
-		call ses3d_evolution
+            write(99,*) "iteration", it, "ispml=", ispml
 
-		if ((adjoint_flag==0) .or. (adjoint_flag==1)) then
+            call ses3d_evolution
 
-			call record_seismograms
+            if ((adjoint_flag==0) .or. (adjoint_flag==1)) then
 
-		endif
+                call record_seismograms
 
-		call mpi_reduce(maxval(vx),vx_max,1,mpi_real,mpi_max,0,mpi_comm_world,ierr)
-		call mpi_reduce(minval(vx),vx_min,1,mpi_real,mpi_min,0,mpi_comm_world,ierr)
+            endif
 
-		!==============================================================
-		! (screen) output
-		!==============================================================
+            call mpi_reduce(maxval(vx),vx_max,1,mpi_real,mpi_max,0,mpi_comm_world,ierr)
+            call mpi_reduce(minval(vx),vx_min,1,mpi_real,mpi_min,0,mpi_comm_world,ierr)
 
-		if (my_rank==0) then
+            !==============================================================
+            ! (screen) output
+            !==============================================================
 
-			if ((adjoint_flag==0) .or. (adjoint_flag==1)) then
+            if (my_rank==0) then
 
-				write(*,*) 'iteration ',it ,':   ', vx_min, '< vx <', vx_max, 'ispml=',ispml
+                if ((adjoint_flag==0) .or. (adjoint_flag==1)) then
 
-			elseif (adjoint_flag==2) then
+                    write(*,*) 'iteration ',it ,':   ', vx_min, '< vx <', vx_max, 'ispml=',ispml
 
-   				write(*,*) 'adjoint iteration ',it ,':   ', vx_min, '< vx <', vx_max, 'ispml=',ispml
+                elseif (adjoint_flag==2) then
 
-			endif
+                    write(*,*) 'adjoint iteration ',it ,':   ', vx_min, '< vx <', vx_max, 'ispml=',ispml
 
-		endif
+                endif
 
-     	if (mod(it,ssamp)==0) then
-			
-			call ses3d_output(it)
-		
-		endif
+            endif
 
-		!==============================================================
-		! save forward wavefield
-		!==============================================================
+            if (mod(it,ssamp)==0) then
+            
+                call ses3d_output(it)
+        
+            endif
 
-		if (adjoint_flag==1) then
+            !==============================================================
+            ! save forward wavefield
+            !==============================================================
+
+            if (adjoint_flag==1) then
 
                 if ((mod(it,samp_ad)==0) .or. (it==1) .or. (it==nt)) then
 
-					!- store strain rate --------------------------
+                    !- store strain rate --------------------------
 
-					call ses3d_store(vx,'vx',it,lpd,1021)
-					call ses3d_store(vy,'vy',it,lpd,1022)
-					call ses3d_store(vz,'vz',it,lpd,1023)
+if (USE_DIAG_FW == 1) then
+                    call diag_store_fw
+endif
+                    call ses3d_store(vx,'vx',it,0,1021)
+                    call ses3d_store(vy,'vy',it,0,1022)
+                    call ses3d_store(vz,'vz',it,0,1023)
 
-					call ses3d_store(dxux,'exx',it,lpd,1041)
-					call ses3d_store(dyuy,'eyy',it,lpd,1042)
-					call ses3d_store(dzuz,'ezz',it,lpd,1043)
+                    call ses3d_store(dxux,'exx',it,0,1041)
+                    call ses3d_store(dyuy,'eyy',it,0,1042)
+                    call ses3d_store(dzuz,'ezz',it,0,1043)
 
-					call ses3d_store((dxuy+dyux)/2,'exy',it,lpd,1044)
-					call ses3d_store((dxuz+dzux)/2,'exz',it,lpd,1045)
-					call ses3d_store((dyuz+dzuy)/2,'eyz',it,lpd,1046)
+                    call ses3d_store((dxuy+dyux)/2,'exy',it,0,1044)
+                    call ses3d_store((dxuz+dzux)/2,'exz',it,0,1045)
+                    call ses3d_store((dyuz+dzuy)/2,'eyz',it,0,1046)
 
-					!- document saving vector ---------------------
+                    !- document saving vector ---------------------
 
-              		saving_vector(it)=it
+                    saving_vector(it)=it
 
-               	endif
+                endif
 
-		endif
+            endif
 
-		!==============================================================
-		! compute Frechet derivatives
-		!==============================================================
+            !==============================================================
+            ! compute Frechet derivatives
+            !==============================================================
 
-		if (adjoint_flag==2) then
+            if (adjoint_flag==2) then
 
-			call ses3d_grad
+                call ses3d_grad
 
-		endif
+            endif
 
-	    enddo	! end of iteration, do it=1,nt
+        enddo       ! end of iteration, do it=1,nt
 
-	    call ses3d_output(nt)
+        call ses3d_output(nt)
 
-	enddo		! end of loop over events
+    enddo           ! end of loop over events
 
-	!======================================================================
-	! date and time output
-	!======================================================================
+    !======================================================================
+    ! date and time output
+    !======================================================================
 
-	if (my_rank==0) then
+    if (my_rank==0) then
 
-		call date_and_time(date2, time2)
+        call date_and_time(date2, time2)
 
-		write(*,*) '------------------------------------------------------------------'
-		write(*,*) 'starting date: ', date1(7:8), '. ', date1(5:6), '. ', date1(5:5), date1(4:4)
-		write(*,*) 'starting time: ', time1(1:2), ':', time1(3:4), ',', time1(5:6)
-		write(*,*) '------------------------------------------------------------------'
-		write(*,*) 'finishing date: ', date2(7:8), '. ', date2(5:6), '. ', date2(5:5), date2(4:4)
-		write(*,*) 'finishing time: ', time2(1:2), ':', time2(3:4), ',', time2(5:6)
-		write(*,*) '------------------------------------------------------------------'
+        write(*,*) '------------------------------------------------------------------'
+        write(*,*) 'starting date: ', date1(7:8), '. ', date1(5:6), '. ', date1(5:5), date1(4:4)
+        write(*,*) 'starting time: ', time1(1:2), ':', time1(3:4), ',', time1(5:6)
+        write(*,*) '------------------------------------------------------------------'
+        write(*,*) 'finishing date: ', date2(7:8), '. ', date2(5:6), '. ', date2(5:5), date2(4:4)
+        write(*,*) 'finishing time: ', time2(1:2), ':', time2(3:4), ',', time2(5:6)
+        write(*,*) '------------------------------------------------------------------'
 
-	endif
+    endif
 
-	close(99)
-	call mpi_finalize(ierr)
+    close(99)
+    call mpi_finalize(ierr)
 
 end program ses3d_main
