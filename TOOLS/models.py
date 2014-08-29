@@ -223,7 +223,9 @@ class ses3d_model(object):
 
     else:
 
-      self.m[k].lat_rot,self.m[k].lon_rot=np.meshgrid(self.m[k].lat,self.m[k].lon)
+      for k in np.arange(self.nsubvol,dtype=int):
+
+        self.m[k].lon_rot,self.m[k].lat_rot=np.meshgrid(self.m[k].lon,self.m[k].lat)
 
     #- read model volume ==================================================
 
@@ -254,8 +256,8 @@ class ses3d_model(object):
 
     self.lat_min=90.0
     self.lat_max=-90.0
-    self.lon_min=180.0
-    self.lon_max=-180.0
+    self.lon_min=360.0
+    self.lon_max=-360.0
 
     for k in np.arange(self.nsubvol):
       if np.min(self.m[k].lat_rot) < self.lat_min: self.lat_min = np.min(self.m[k].lat_rot)
@@ -268,6 +270,8 @@ class ses3d_model(object):
 
       self.lat_centre = (self.lat_max+self.lat_min)/2.0
       self.lon_centre = (self.lon_max+self.lon_min)/2.0
+
+      print self.lon_min, self.lon_max, self.lon_centre
 
     else:
       self.global_regional = "regional"
@@ -766,6 +770,7 @@ class ses3d_model(object):
           print 'true plotting depth: '+str(6371.0-r[idz])+' km'
 
         x,y=m(self.m[k].lon_rot,self.m[k].lat_rot)
+
         x_list.append(x)
         y_list.append(y)
 
@@ -804,6 +809,9 @@ class ses3d_model(object):
     #- loop over subvolumes to plot ---------------------------------------
 
     for k in np.arange(len(N_list)):
+
+      print np.shape(x_list[k]), np.shape(y_list[k]), np.shape(self.m[N_list[k]].v[:,:,idz_list[k]])
+
       im=m.pcolor(x_list[k],y_list[k],self.m[N_list[k]].v[:,:,idz_list[k]],cmap=my_colormap,vmin=min_val_plot,vmax=max_val_plot)
 
       m.colorbar(im,"right", size="3%", pad='2%')
