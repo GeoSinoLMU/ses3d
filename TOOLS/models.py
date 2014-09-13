@@ -66,6 +66,50 @@ class ses3d_model(object):
 
 
   #########################################################################
+  #- copy models
+  #########################################################################
+
+  def copy(self):
+    """ Copy a model
+    """
+
+    res=ses3d_model()
+
+    res.nsubvol=self.nsubvol
+
+    res.lat_min=self.lat_min
+    res.lat_max=self.lat_max
+    res.lon_min=self.lon_min
+    res.lon_max=self.lon_max
+    res.lat_centre=self.lat_centre
+    res.lon_centre=self.lon_centre
+    res.phi=self.phi
+
+    res.n=self.n
+
+    res.global_regional=self.global_regional
+    res.d_lon=self.d_lon
+    res.d_lat=self.d_lat
+
+    for k in np.arange(self.nsubvol):
+
+      subvol=ses3d_submodel()
+
+      subvol.lat=self.m[k].lat
+      subvol.lon=self.m[k].lon
+      subvol.r=self.m[k].r
+
+      subvol.lat_rot=self.m[k].lat_rot
+      subvol.lon_rot=self.m[k].lon_rot
+      
+      subvol.v=self.m[k].v
+
+      res.m.append(subvol)
+
+    return res
+
+
+  #########################################################################
   #- multiplication with a scalar
   #########################################################################
 
@@ -223,9 +267,7 @@ class ses3d_model(object):
 
     else:
 
-      for k in np.arange(self.nsubvol,dtype=int):
-
-        self.m[k].lon_rot,self.m[k].lat_rot=np.meshgrid(self.m[k].lon,self.m[k].lat)
+      self.m[k].lat_rot,self.m[k].lon_rot=np.meshgrid(self.m[k].lat,self.m[k].lon)
 
     #- read model volume ==================================================
 
@@ -256,8 +298,8 @@ class ses3d_model(object):
 
     self.lat_min=90.0
     self.lat_max=-90.0
-    self.lon_min=360.0
-    self.lon_max=-360.0
+    self.lon_min=180.0
+    self.lon_max=-180.0
 
     for k in np.arange(self.nsubvol):
       if np.min(self.m[k].lat_rot) < self.lat_min: self.lat_min = np.min(self.m[k].lat_rot)
@@ -270,8 +312,6 @@ class ses3d_model(object):
 
       self.lat_centre = (self.lat_max+self.lat_min)/2.0
       self.lon_centre = (self.lon_max+self.lon_min)/2.0
-
-      print self.lon_min, self.lon_max, self.lon_centre
 
     else:
       self.global_regional = "regional"
@@ -312,6 +352,44 @@ class ses3d_model(object):
             fid_m.write(str(self.m[k].v[idx,idy,idz])+'\n')
 
     fid_m.close()
+
+  #########################################################################
+  #- Compute the L2 norm.
+  #########################################################################
+
+  def norm(self):
+
+    N=0.0
+
+    #- Loop over subvolumes. ----------------------------------------------
+
+    for n in np.arange(self.nsubvol):
+
+      #- Size of the array.
+      nx=len(self.m[n].lat)-1
+      ny=len(self.m[n].lon)-1
+      nz=len(self.m[n].r)-1
+
+      #- Compute volume elements.
+      dV=np.zeros(np.shape(self.m[n].v))
+      theta=(90.0-self.m[n].lat)*np.pi/180.0
+
+      dr=self.m[n].r[1]-self.m[n].r[0]
+      dphi=(self.m[n].lon[1]-self.m[n].lon[0])*np.pi/180.0
+      dtheta=theta[1]-theta[0]
+      
+      for idx in np.arange(nx):
+        for idy in np.arange(ny):
+          for idz in np.arange(nz):
+            dV[idx,idy,idz]=theta[idx]*(self.m[n].r[idz])**2
+
+      dV=dr*dtheta*dphi*dV
+
+      #- Integrate.
+      N+=np.sum(self.m[n].v*dV)
+
+    #- Finish. ------------------------------------------------------------
+    return np.sqrt(N)
 
   #########################################################################
   #- Apply horizontal smoothing.
@@ -770,7 +848,6 @@ class ses3d_model(object):
           print 'true plotting depth: '+str(6371.0-r[idz])+' km'
 
         x,y=m(self.m[k].lon_rot,self.m[k].lat_rot)
-
         x_list.append(x)
         y_list.append(y)
 
@@ -809,9 +886,6 @@ class ses3d_model(object):
     #- loop over subvolumes to plot ---------------------------------------
 
     for k in np.arange(len(N_list)):
-
-      print np.shape(x_list[k]), np.shape(y_list[k]), np.shape(self.m[N_list[k]].v[:,:,idz_list[k]])
-
       im=m.pcolor(x_list[k],y_list[k],self.m[N_list[k]].v[:,:,idz_list[k]],cmap=my_colormap,vmin=min_val_plot,vmax=max_val_plot)
 
       m.colorbar(im,"right", size="3%", pad='2%')
