@@ -386,7 +386,7 @@ class ses3d_model(object):
       dV=dr*dtheta*dphi*dV
 
       #- Integrate.
-      N+=np.sum(self.m[n].v*dV)
+      N+=np.sum(dV*(self.m[n].v)**2)
 
     #- Finish. ------------------------------------------------------------
     return np.sqrt(N)
@@ -395,7 +395,7 @@ class ses3d_model(object):
   #- Apply horizontal smoothing.
   #########################################################################
 
-  def smooth_horizontal(self,sigma):
+  def smooth_horizontal(self,sigma,filter='gauss'):
     """
     smooth_horizontal(self,sigma)
 
@@ -413,63 +413,72 @@ class ses3d_model(object):
 
     for n in np.arange(self.nsubvol):
 
+      v_filtered=self.m[n].v
+
       #- Size of the array.
       nx=len(self.m[n].lat)-1
       ny=len(self.m[n].lon)-1
       nz=len(self.m[n].r)-1
 
-      #- Estimate element width.
-      r=np.mean(self.m[n].r)
-      dx=r*np.pi*(self.m[n].lat[0]-self.m[n].lat[1])/180.0
+      if filter=='gauss':
+
+        #- Estimate element width.
+        r=np.mean(self.m[n].r)
+        dx=r*np.pi*(self.m[n].lat[0]-self.m[n].lat[1])/180.0
       
-      #- Colat and lon fields for the small Gaussian.
-      dn=2*np.round(sigma/dx)
+        #- Colat and lon fields for the small Gaussian.
+        dn=3*np.ceil(sigma/dx)
 
-      nx_min=np.round(float(nx)/2.0)-dn
-      nx_max=np.round(float(nx)/2.0)+dn
+        nx_min=np.round(float(nx)/2.0)-dn
+        nx_max=np.round(float(nx)/2.0)+dn
 
-      ny_min=np.round(float(ny)/2.0)-dn
-      ny_max=np.round(float(ny)/2.0)+dn
+        ny_min=np.round(float(ny)/2.0)-dn
+        ny_max=np.round(float(ny)/2.0)+dn
 
-      lon,colat=np.meshgrid(self.m[n].lon[ny_min:ny_max],90.0-self.m[n].lat[nx_min:nx_max],dtype=float)
-      colat=np.pi*colat/180.0
-      lon=np.pi*lon/180.0
+        lon,colat=np.meshgrid(self.m[n].lon[ny_min:ny_max],90.0-self.m[n].lat[nx_min:nx_max],dtype=float)
+        colat=np.pi*colat/180.0
+        lon=np.pi*lon/180.0
 
-      #- Volume element.
-      dy=r*np.pi*np.sin(colat)*(self.m[n].lon[1]-self.m[n].lon[0])/180.0
-      dV=dx*dy
+        #- Volume element.
+        dy=r*np.pi*np.sin(colat)*(self.m[n].lon[1]-self.m[n].lon[0])/180.0
+        dV=dx*dy
       
-      #- Unit vector field.
-      x=np.cos(lon)*np.sin(colat)
-      y=np.sin(lon)*np.sin(colat)
-      z=np.cos(colat)
+        #- Unit vector field.
+        x=np.cos(lon)*np.sin(colat)
+        y=np.sin(lon)*np.sin(colat)
+        z=np.cos(colat)
 
-      #- Make a Gaussian centred in the middle of the grid. ---------------
-      i=np.round(float(nx)/2.0)-1
-      j=np.round(float(ny)/2.0)-1
+        #- Make a Gaussian centred in the middle of the grid. ---------------
+        i=np.round(float(nx)/2.0)-1
+        j=np.round(float(ny)/2.0)-1
 
-      colat_i=np.pi*(90.0-self.m[n].lat[i])/180.0
-      lon_j=np.pi*self.m[n].lon[j]/180.0
+        colat_i=np.pi*(90.0-self.m[n].lat[i])/180.0
+        lon_j=np.pi*self.m[n].lon[j]/180.0
 
-      x_i=np.cos(lon_j)*np.sin(colat_i)
-      y_j=np.sin(lon_j)*np.sin(colat_i)
-      z_k=np.cos(colat_i)
+        x_i=np.cos(lon_j)*np.sin(colat_i)
+        y_j=np.sin(lon_j)*np.sin(colat_i)
+        z_k=np.cos(colat_i)
 
-      #- Compute the Gaussian.
-      G=x*x_i+y*y_j+z*z_k
-      G=G/np.max(np.abs(G))
-      G=r*np.arccos(G)
-      G=np.exp(-0.5*G**2/sigma**2)/(2.0*np.pi*sigma**2)
+        #- Compute the Gaussian.
+        G=x*x_i+y*y_j+z*z_k
+        G=G/np.max(np.abs(G))
+        G=r*np.arccos(G)
+        G=np.exp(-0.5*G**2/sigma**2)/(2.0*np.pi*sigma**2)
 
-      #- Move the Gaussian across the field. ------------------------------
+        #- Move the Gaussian across the field. ------------------------------
       
-      v_filtered=self.m[n].v
+        for i in np.arange(dn+1,nx-dn-1):
+          for j in np.arange(dn+1,ny-dn-1):
+            for k in np.arange(nz):
 
-      for i in np.arange(dn+1,nx-dn-1):
-        for j in np.arange(dn+1,ny-dn-1):
-          for k in np.arange(nz):
+              v_filtered[i,j,k]=np.sum(self.m[n].v[i-dn:i+dn,j-dn:j+dn,k]*G*dV)
 
-            v_filtered[i,j,k]=np.sum(self.m[n].v[i-dn:i+dn,j-dn:j+dn,k]*G*dV)
+      elif filter=='neighbour':
+
+        for i in np.arange(1,nx-1):
+          for j in np.arange(1,ny-1):
+
+              v_filtered[i,j,:]=(self.m[n].v[i,j,:]+self.m[n].v[i+1,j,:]+self.m[n].v[i-1,j,:]+self.m[n].v[i,j+1,:]+self.m[n].v[i,j-1,:])/5.0
 
       self.m[n].v=v_filtered
 
@@ -788,14 +797,15 @@ class ses3d_model(object):
   #- plot horizontal slices
   #########################################################################
 
-  def plot_slice(self,depth,colormap='tomo',res='i',verbose=False):
+  def plot_slice(self,depth,colormap='tomo',res='i',save_under=None,verbose=False):
     """ plot horizontal slices through an ses3d model
 
-    plot_slice(self,depth,colormap='tomo',res='i',verbose=False)
+    plot_slice(self,depth,colormap='tomo',res='i',save_under=None,verbose=False)
 
     depth=depth in km of the slice
     colormap='tomo','mono'
     res=resolution of the map, admissible values are: c, l, i, h f
+    save_under=save figure as *.png with the filename "save_under". Prevents plotting of the slice.
 
     """
 
@@ -888,9 +898,14 @@ class ses3d_model(object):
     for k in np.arange(len(N_list)):
       im=m.pcolor(x_list[k],y_list[k],self.m[N_list[k]].v[:,:,idz_list[k]],cmap=my_colormap,vmin=min_val_plot,vmax=max_val_plot)
 
-      m.colorbar(im,"right", size="3%", pad='2%')
-      plt.title(str(depth)+' km')
+    m.colorbar(im,"right", size="3%", pad='2%')
+    plt.title(str(depth)+' km')
+    
+    if save_under is None:
       plt.show()
+    else:
+      plt.savefig(save_under+'.png', format='png', dpi=200)
+      plt.close()
 
   #########################################################################
   #- plot depth to a certain threshold value
