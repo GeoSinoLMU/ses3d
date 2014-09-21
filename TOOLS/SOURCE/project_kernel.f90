@@ -588,6 +588,8 @@ implicit none
 				  ! find indices of integration limits
 				  !===================================================
 
+				  !!! THIS FINDS THE INDICES OF THE ELEMENTS WITHIN WHICH THE BOX IS FALLING.
+
 				  !- x-direction
 
 				  if (bxco(indx)>xmin) then
@@ -651,6 +653,8 @@ implicit none
 				  !-4-================================================
 				  ! perform integration
 				  !===================================================
+
+				  !!! THIS SHOULD FIND THE INTEGRATION LIMITS IN THE REFERENCE CUBE.
 
 				  do i=ix_min,ix_max	! loop over elements in this box in x direction
 
