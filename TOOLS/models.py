@@ -395,13 +395,14 @@ class ses3d_model(object):
   #- Apply horizontal smoothing.
   #########################################################################
 
-  def smooth_horizontal(self,sigma,filter='gauss'):
+  def smooth_horizontal(self,sigma,filter_type='gauss'):
     """
-    smooth_horizontal(self,sigma)
+    smooth_horizontal(self,sigma,filter='gauss')
 
-    Experimental function for the horizontal smoothing with a Gaussian of width sigma.
-    The Gaussian moves across the horizontal slices and computes the integral over
-    the windowed model.
+    Experimental function for smoothing in horizontal directions.
+
+    filter_type: gauss (Gaussian smoothing), neighbour (average over neighbouring cells)
+    sigma: filter width (when filter_type='gauss') or iterations (when filter_type='neighbour')
 
     WARNING: Currently, the smoothing only works within each subvolume. The problem 
     of smoothing across subvolumes without having excessive algorithmic complexity 
@@ -420,7 +421,7 @@ class ses3d_model(object):
       ny=len(self.m[n].lon)-1
       nz=len(self.m[n].r)-1
 
-      if filter=='gauss':
+      if filter_type=='gauss':
 
         #- Estimate element width.
         r=np.mean(self.m[n].r)
@@ -473,14 +474,16 @@ class ses3d_model(object):
 
               v_filtered[i,j,k]=np.sum(self.m[n].v[i-dn:i+dn,j-dn:j+dn,k]*G*dV)
 
-      elif filter=='neighbour':
+      elif filter_type=='neighbour':
 
-        for i in np.arange(1,nx-1):
-          for j in np.arange(1,ny-1):
+        for iteration in np.arange(int(sigma)):
+
+          for i in np.arange(1,nx-1):
+            for j in np.arange(1,ny-1):
 
               v_filtered[i,j,:]=(self.m[n].v[i,j,:]+self.m[n].v[i+1,j,:]+self.m[n].v[i-1,j,:]+self.m[n].v[i,j+1,:]+self.m[n].v[i,j-1,:])/5.0
 
-      self.m[n].v=v_filtered
+        self.m[n].v=v_filtered
 
 
   #########################################################################
@@ -797,7 +800,7 @@ class ses3d_model(object):
   #- plot horizontal slices
   #########################################################################
 
-  def plot_slice(self,depth,colormap='tomo',res='i',save_under=None,verbose=False):
+  def plot_slice(self,depth,min_val_plot=None,max_val_plot=None,colormap='tomo',res='i',save_under=None,verbose=False):
     """ plot horizontal slices through an ses3d model
 
     plot_slice(self,depth,colormap='tomo',res='i',save_under=None,verbose=False)
@@ -863,36 +866,38 @@ class ses3d_model(object):
 
     #- make a (hopefully) intelligent colour scale ------------------------
 
-    if len(N_list)>0:
+    if min_val_plot is None:
 
-      #- compute some diagnostics
+      if len(N_list)>0:
 
-      min_list=[]
-      max_list=[]
-      percentile_list=[]
+        #- compute some diagnostics
+
+        min_list=[]
+        max_list=[]
+        percentile_list=[]
       
-      for k in np.arange(len(N_list)):
+        for k in np.arange(len(N_list)):
 
-        min_list.append(np.min(self.m[N_list[k]].v[:,:,idz_list[k]]))
-        max_list.append(np.max(self.m[N_list[k]].v[:,:,idz_list[k]]))
-        percentile_list.append(np.percentile(np.abs(self.m[N_list[k]].v[:,:,idz_list[k]]),99.0))
+          min_list.append(np.min(self.m[N_list[k]].v[:,:,idz_list[k]]))
+          max_list.append(np.max(self.m[N_list[k]].v[:,:,idz_list[k]]))
+          percentile_list.append(np.percentile(np.abs(self.m[N_list[k]].v[:,:,idz_list[k]]),99.0))
 
-      minval=np.min(min_list)
-      maxval=np.max(max_list)
-      percent=np.max(percentile_list)
+        minval=np.min(min_list)
+        maxval=np.max(max_list)
+        percent=np.max(percentile_list)
 
-      #- min and max roughly centred around zero
+        #- min and max roughly centred around zero
 
-      if (minval*maxval<0.0):
-        max_val_plot=percent
-        min_val_plot=-max_val_plot
+        if (minval*maxval<0.0):
+          max_val_plot=percent
+          min_val_plot=-max_val_plot
 
-      #- min and max not centred around zero
+        #- min and max not centred around zero
 
-      else:
-        max_val_plot=maxval
-        min_val_plot=minval
-
+        else:
+          max_val_plot=maxval
+          min_val_plot=minval
+    
     #- loop over subvolumes to plot ---------------------------------------
 
     for k in np.arange(len(N_list)):
