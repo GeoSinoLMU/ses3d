@@ -392,6 +392,30 @@ class ses3d_model(object):
     return np.sqrt(N)
 
   #########################################################################
+  #- Remove the upper percentiles of a model.
+  #########################################################################
+
+  def clip_percentile(self,percentile):
+    """
+    Clip the upper percentiles of the model. Particularly useful to remove the singularities in sensitivity kernels.
+    """
+
+    #- Loop over subvolumes to find the percentile.
+    percentile_list=[]
+
+    for n in np.arange(self.nsubvol):
+      percentile_list.append(np.percentile(np.abs(self.m[n].v),percentile))
+
+    percent=np.max(percentile_list)
+
+    #- Clip the values above the percentile.
+    for n in np.arange(self.nsubvol):
+      idx=np.nonzero(np.greater(np.abs(self.m[n].v),percent))
+      self.m[n].v[idx]=np.sign(self.m[n].v[idx])*percent
+
+
+
+  #########################################################################
   #- Apply horizontal smoothing.
   #########################################################################
 
@@ -410,7 +434,7 @@ class ses3d_model(object):
 
     """
 
-    #- Loop over subvolumes.-----------------------------------------------
+    #- Loop over subvolumes.---------------------------------------------------
 
     for n in np.arange(self.nsubvol):
 
@@ -420,6 +444,8 @@ class ses3d_model(object):
       nx=len(self.m[n].lat)-1
       ny=len(self.m[n].lon)-1
       nz=len(self.m[n].r)-1
+
+      #- Gaussian smoothing. --------------------------------------------------
 
       if filter_type=='gauss':
 
@@ -449,7 +475,7 @@ class ses3d_model(object):
         y=np.sin(lon)*np.sin(colat)
         z=np.cos(colat)
 
-        #- Make a Gaussian centred in the middle of the grid. ---------------
+        #- Make a Gaussian centred in the middle of the grid. -----------------
         i=np.round(float(nx)/2.0)-1
         j=np.round(float(ny)/2.0)-1
 
@@ -466,13 +492,15 @@ class ses3d_model(object):
         G=r*np.arccos(G)
         G=np.exp(-0.5*G**2/sigma**2)/(2.0*np.pi*sigma**2)
 
-        #- Move the Gaussian across the field. ------------------------------
+        #- Move the Gaussian across the field. --------------------------------
       
         for i in np.arange(dn+1,nx-dn-1):
           for j in np.arange(dn+1,ny-dn-1):
             for k in np.arange(nz):
 
               v_filtered[i,j,k]=np.sum(self.m[n].v[i-dn:i+dn,j-dn:j+dn,k]*G*dV)
+
+      #- Smoothing by averaging over neighbouring cells. ----------------------
 
       elif filter_type=='neighbour':
 
@@ -897,7 +925,7 @@ class ses3d_model(object):
         else:
           max_val_plot=maxval
           min_val_plot=minval
-    
+
     #- loop over subvolumes to plot ---------------------------------------
 
     for k in np.arange(len(N_list)):
