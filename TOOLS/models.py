@@ -686,7 +686,7 @@ class ses3d_model(object):
   #########################################################################
 
   def convert_to_vtk(self,directory,filename,verbose=False):
-    """ convert ses3d model to vtk format for plotting with Paraview
+    """ convert ses3d model to vtk format for plotting with Paraview, VisIt, ... .
 
     convert_to_vtk(self,directory,filename,verbose=False):
     """
@@ -723,31 +723,29 @@ class ses3d_model(object):
     for n in np.arange(self.nsubvol):
 
       if verbose==True:
-	print 'writing grid points for subvolume '+str(n)
+        print 'writing grid points for subvolume '+str(n)
 
       for i in np.arange(nx[n]):
-	for j in np.arange(ny[n]):
-	  for k in np.arange(nz[n]):
+        for j in np.arange(ny[n]):
+          for k in np.arange(nz[n]):
 
-	    theta=90.0-self.m[n].lat[i]
-	    phi=self.m[n].lon[j]
+            theta=90.0-self.m[n].lat[i]
+            phi=self.m[n].lon[j]
 
-	    #- rotate coordinate system
+            #- rotate coordinate system
+            if self.phi!=0.0:
+              theta,phi=rot.rotate_coordinates(self.n,-self.phi,theta,phi)
 
-	    if self.phi!=0.0:
-	      theta,phi=rot.rotate_coordinates(self.n,-self.phi,theta,phi)
+              #- transform to cartesian coordinates and write to file
+              theta=theta*np.pi/180.0
+              phi=phi*np.pi/180.0
 
-	    #- transform to cartesian coordinates and write to file
+              r=self.m[n].r[k]
+              x=r*np.sin(theta)*np.cos(phi);
+              y=r*np.sin(theta)*np.sin(phi);
+              z=r*np.cos(theta);
 
-	    theta=theta*np.pi/180.0
-	    phi=phi*np.pi/180.0
-
-	    r=self.m[n].r[k]
-	    x=r*np.sin(theta)*np.cos(phi);
-            y=r*np.sin(theta)*np.sin(phi);
-            z=r*np.cos(theta);
-
-	    fid.write(str(x)+' '+str(y)+' '+str(z)+'\n')
+              fid.write(str(x)+' '+str(y)+' '+str(z)+'\n')
 
     #- write connectivity
 
@@ -764,22 +762,22 @@ class ses3d_model(object):
     for n in np.arange(self.nsubvol):
 
       if verbose==True:
-	print 'writing conectivity for subvolume '+str(n)
+        print 'writing conectivity for subvolume '+str(n)
 
       for i in np.arange(1,nx[n]):
-	for j in np.arange(1,ny[n]):
-	  for k in np.arange(1,nz[n]):
-								# i j k
-	    a=count+k+(j-1)*nz[n]+(i-1)*ny[n]*nz[n]-1     	# 0 0 0
-	    b=count+k+(j-1)*nz[n]+(i-1)*ny[n]*nz[n]       	# 0 0 1
-	    c=count+k+(j)*nz[n]+(i-1)*ny[n]*nz[n]-1       	# 0 1 0
-	    d=count+k+(j)*nz[n]+(i-1)*ny[n]*nz[n]         	# 0 1 1
-	    e=count+k+(j-1)*nz[n]+(i)*ny[n]*nz[n]-1       	# 1 0 0
-	    f=count+k+(j-1)*nz[n]+(i)*ny[n]*nz[n]         	# 1 0 1
-	    g=count+k+(j)*nz[n]+(i)*ny[n]*nz[n]-1         	# 1 1 0
-	    h=count+k+(j)*nz[n]+(i)*ny[n]*nz[n]           	# 1 1 1
+        for j in np.arange(1,ny[n]):
+          for k in np.arange(1,nz[n]):
 
-	    fid.write('8 '+str(a)+' '+str(b)+' '+str(c)+' '+str(d)+' '+str(e)+' '+str(f)+' '+str(g)+' '+str(h)+'\n')
+            a=count+k+(j-1)*nz[n]+(i-1)*ny[n]*nz[n]-1
+            b=count+k+(j-1)*nz[n]+(i-1)*ny[n]*nz[n] 
+            c=count+k+(j)*nz[n]+(i-1)*ny[n]*nz[n]-1
+            d=count+k+(j)*nz[n]+(i-1)*ny[n]*nz[n]
+            e=count+k+(j-1)*nz[n]+(i)*ny[n]*nz[n]-1
+            f=count+k+(j-1)*nz[n]+(i)*ny[n]*nz[n]
+            g=count+k+(j)*nz[n]+(i)*ny[n]*nz[n]-1
+            h=count+k+(j)*nz[n]+(i)*ny[n]*nz[n]
+
+            fid.write('8 '+str(a)+' '+str(b)+' '+str(c)+' '+str(d)+' '+str(e)+' '+str(f)+' '+str(g)+' '+str(h)+'\n')
 
       count=count+nx[n]*ny[n]*nz[n]
 
@@ -791,13 +789,13 @@ class ses3d_model(object):
     for n in np.arange(self.nsubvol):
 
       if verbose==True:
-	print 'writing cell types for subvolume '+str(n)
+        print 'writing cell types for subvolume '+str(n)
 
       for i in np.arange(nx[n]-1):
-	for j in np.arange(ny[n]-1):
-	  for k in np.arange(nz[n]-1):
+        for j in np.arange(ny[n]-1):
+          for k in np.arange(nz[n]-1):
 
-	    fid.write('11\n')
+            fid.write('11\n')
 
     #- write data
 
@@ -809,7 +807,7 @@ class ses3d_model(object):
     for n in np.arange(self.nsubvol):
 
       if verbose==True:
-	print 'writing data for subvolume '+str(n)
+        print 'writing data for subvolume '+str(n)
 
       idx=np.arange(nx[n])
       idx[nx[n]-1]=nx[n]-2
@@ -821,10 +819,10 @@ class ses3d_model(object):
       idz[nz[n]-1]=nz[n]-2
 
       for i in idx:
-	for j in idy:
-	  for k in idz:
+        for j in idy:
+          for k in idz:
 
-	    fid.write(str(self.m[n].v[i,j,k])+'\n')
+            fid.write(str(self.m[n].v[i,j,k])+'\n')
 
     #- clean up
 
