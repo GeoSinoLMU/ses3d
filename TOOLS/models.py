@@ -267,7 +267,12 @@ class ses3d_model(object):
 
     else:
 
-      self.m[k].lat_rot,self.m[k].lon_rot=np.meshgrid(self.m[k].lat,self.m[k].lon)
+      for k in np.arange(self.nsubvol,dtype=int):
+
+        self.m[k].lat_rot,self.m[k].lon_rot=np.meshgrid(self.m[k].lat,self.m[k].lon)
+        self.m[k].lat_rot=self.m[k].lat_rot.T
+        self.m[k].lon_rot=self.m[k].lon_rot.T
+
 
     #- read model volume ==================================================
 
@@ -306,6 +311,7 @@ class ses3d_model(object):
       if np.max(self.m[k].lat_rot) > self.lat_max: self.lat_max = np.max(self.m[k].lat_rot)
       if np.min(self.m[k].lon_rot) < self.lon_min: self.lon_min = np.min(self.m[k].lon_rot)
       if np.max(self.m[k].lon_rot) > self.lon_max: self.lon_max = np.max(self.m[k].lon_rot)
+
 
     if ((self.lat_max-self.lat_min) > 90.0 or (self.lon_max-self.lon_min) > 90.0):
       self.global_regional = "global"
@@ -853,7 +859,7 @@ class ses3d_model(object):
       m.drawparallels(np.arange(-80.0,80.0,10.0),labels=[1,0,0,1])
       m.drawmeridians(np.arange(-170.0,170.0,10.0),labels=[1,0,0,1])
 
-    m.drawcoastlines()
+    m.drawcoastlines(linewidth=3.0)
     m.drawcountries()
 
     m.drawmapboundary(fill_color=[1.0,1.0,1.0])
@@ -872,6 +878,9 @@ class ses3d_model(object):
 
     for k in np.arange(self.nsubvol):
 
+      nx=len(self.m[k].lat)
+      ny=len(self.m[k].lon)
+
       r=self.m[k].r
 
       #- collect subvolumes within target depth
@@ -888,7 +897,7 @@ class ses3d_model(object):
         if verbose==True:
           print 'true plotting depth: '+str(6371.0-r[idz])+' km'
 
-        x,y=m(self.m[k].lon_rot,self.m[k].lat_rot)
+        x,y=m(self.m[k].lon_rot[0:nx-1,0:ny-1],self.m[k].lat_rot[0:nx-1,0:ny-1])
         x_list.append(x)
         y_list.append(y)
 
@@ -930,10 +939,17 @@ class ses3d_model(object):
 
     for k in np.arange(len(N_list)):
       im=m.pcolor(x_list[k],y_list[k],self.m[N_list[k]].v[:,:,idz_list[k]],cmap=my_colormap,vmin=min_val_plot,vmax=max_val_plot)
+      
+      #if colormap=='mono':
+        #cs=m.contour(x_list[k],y_list[k],self.m[N_list[k]].v[:,:,idz_list[k]], colors='r',linewidths=1.0)
+        #plt.clabel(cs,colors='r')
+        
 
+    #- make a colorbar and title ------------------------------------------
     m.colorbar(im,"right", size="3%", pad='2%')
     plt.title(str(depth)+' km')
     
+    #- save image if wanted -----------------------------------------------
     if save_under is None:
       plt.show()
     else:
