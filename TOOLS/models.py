@@ -267,12 +267,7 @@ class ses3d_model(object):
 
     else:
 
-      for k in np.arange(self.nsubvol,dtype=int):
-
-        self.m[k].lat_rot,self.m[k].lon_rot=np.meshgrid(self.m[k].lat,self.m[k].lon)
-        self.m[k].lat_rot=self.m[k].lat_rot.T
-        self.m[k].lon_rot=self.m[k].lon_rot.T
-
+      self.m[k].lat_rot,self.m[k].lon_rot=np.meshgrid(self.m[k].lat,self.m[k].lon)
 
     #- read model volume ==================================================
 
@@ -311,7 +306,6 @@ class ses3d_model(object):
       if np.max(self.m[k].lat_rot) > self.lat_max: self.lat_max = np.max(self.m[k].lat_rot)
       if np.min(self.m[k].lon_rot) < self.lon_min: self.lon_min = np.min(self.m[k].lon_rot)
       if np.max(self.m[k].lon_rot) > self.lon_max: self.lon_max = np.max(self.m[k].lon_rot)
-
 
     if ((self.lat_max-self.lat_min) > 90.0 or (self.lon_max-self.lon_min) > 90.0):
       self.global_regional = "global"
@@ -605,25 +599,25 @@ class ses3d_model(object):
 
       self.m[n].v=v_filtered
 
+
   #########################################################################
-  #- Compute relaxed velocities from velocities at 1 s reference period.
+  #- Compute velocity at 1 s from relaxed velocities
   #########################################################################
 
-  def ref2relax(self, qmodel='cem', nrelax=3):
+  def relax2ref(self, qmodel='cem', nrelax=3, f_intermediate=0.1):
     """
-    ref2relax(qmodel='cem', nrelax=3)
+    Compute velocities at the reference frequency of 1 Hz. This is done in two stages:
 
-    Assuming that the current velocity model is given at the reference period 1 s, 
-    ref2relax computes the relaxed velocities. They may then be written to a file.
+    Stage 1 takes the discrete absorption band model to compute the velocity at an intermediate frequency
+    f_intermediate that is located within the absorption band.
 
-    For this conversion, the relaxation parameters from the /INPUT/relax file are taken.
+    Stage 2 then takes the continuous absorption band model to go to the reference frequency of 1 Hz.
 
-    Currently implemented Q models (qmodel): cem, prem, ql6 . 
-
-    nrelax is the number of relaxation mechnisms.
     """
 
-    #- Read the relaxation parameters from the relax file. ----------------
+    #- Stage 1: From relaxed to intermediate frequency. -------------------
+
+    #- Read the relaxation parameters from the relax file.
 
     tau_p=np.zeros(nrelax)
     D_p=np.zeros(nrelax)
@@ -642,7 +636,7 @@ class ses3d_model(object):
 
     fid.close()
 
-    #- Loop over subvolumes. ----------------------------------------------
+    #- Loop over subvolumes. 
 
     for k in np.arange(self.nsubvol):
 
@@ -650,10 +644,10 @@ class ses3d_model(object):
       ny=len(self.m[k].lon)-1
       nz=len(self.m[k].r)-1
 
-      #- Loop over radius within the subvolume. ---------------------------
+      #- Loop over radius within the subvolume.
       for idz in np.arange(nz):
 
-        #- Compute Q. -----------------------------------------------------
+        #- Compute Q. 
         if qmodel=='cem':
           Q=q.q_cem(self.m[k].r[idz])
         elif qmodel=='ql6':
@@ -661,11 +655,11 @@ class ses3d_model(object):
         elif qmodel=='prem':
           Q=q.q_prem(self.m[k].r[idz])
 
-        #- Compute A and B for the reference period of 1 s. ---------------
+        #- Compute A and B for the intermediate frequency of 1 Hz.
 
         A=1.0
         B=0.0
-        w=2.0*np.pi
+        w=2.0*np.pi*f_intermediate
 
         tau=1.0/Q
 
@@ -673,20 +667,49 @@ class ses3d_model(object):
           A+=tau*D_p[n]*(w**2)*(tau_p[n]**2)/(1.0+(w**2)*(tau_p[n]**2))
           B+=tau*D_p[n]*w*tau_p[n]/(1.0+(w**2)*(tau_p[n]**2))
 
-        conversion_factor=(A+np.sqrt(A**2+B**2))/(A**2+B**2)
-        conversion_factor=np.sqrt(0.5*conversion_factor)
+        conversion_factor=2.0*(A**2+B**2)/(A+np.sqrt(A**2+B**2))
+        conversion_factor=np.sqrt(conversion_factor)
 
-        #- Correct velocities. --------------------------------------------
+        #- Correct velocities.
 
         self.m[k].v[:,:,idz]=conversion_factor*self.m[k].v[:,:,idz]
-    
+
+      #- Stage 2: From intermediate frequency to reference frequency. -----
+
+      #- Loop over subvolumes. 
+
+      for k in np.arange(self.nsubvol):
+
+        nx=len(self.m[k].lat)-1
+        ny=len(self.m[k].lon)-1
+        nz=len(self.m[k].r)-1
+
+        #- Loop over radius within the subvolume.
+        for idz in np.arange(nz):
+
+          #- Compute Q. 
+          if qmodel=='cem':
+            Q=q.q_cem(self.m[k].r[idz])
+          elif qmodel=='ql6':
+            Q=q.q_ql6(self.m[k].r[idz])
+          elif qmodel=='prem':
+            Q=q.q_prem(self.m[k].r[idz])
+
+          #- Conversion factor.
+
+          conversion_factor=1.0+np.log(1.0/f_intermediate)/(np.pi*Q)
+
+          #- Correct velocities.
+
+          self.m[k].v[:,:,idz]=conversion_factor*self.m[k].v[:,:,idz]
+
 
   #########################################################################
   #- convert to vtk format
   #########################################################################
 
   def convert_to_vtk(self,directory,filename,verbose=False):
-    """ convert ses3d model to vtk format for plotting with Paraview, VisIt, ... .
+    """ convert ses3d model to vtk format for plotting with Paraview
 
     convert_to_vtk(self,directory,filename,verbose=False):
     """
@@ -723,29 +746,31 @@ class ses3d_model(object):
     for n in np.arange(self.nsubvol):
 
       if verbose==True:
-        print 'writing grid points for subvolume '+str(n)
+	print 'writing grid points for subvolume '+str(n)
 
       for i in np.arange(nx[n]):
-        for j in np.arange(ny[n]):
-          for k in np.arange(nz[n]):
+	for j in np.arange(ny[n]):
+	  for k in np.arange(nz[n]):
 
-            theta=90.0-self.m[n].lat[i]
-            phi=self.m[n].lon[j]
+	    theta=90.0-self.m[n].lat[i]
+	    phi=self.m[n].lon[j]
 
-            #- rotate coordinate system
-            if self.phi!=0.0:
-              theta,phi=rot.rotate_coordinates(self.n,-self.phi,theta,phi)
+	    #- rotate coordinate system
 
-              #- transform to cartesian coordinates and write to file
-              theta=theta*np.pi/180.0
-              phi=phi*np.pi/180.0
+	    if self.phi!=0.0:
+	      theta,phi=rot.rotate_coordinates(self.n,-self.phi,theta,phi)
 
-              r=self.m[n].r[k]
-              x=r*np.sin(theta)*np.cos(phi);
-              y=r*np.sin(theta)*np.sin(phi);
-              z=r*np.cos(theta);
+	    #- transform to cartesian coordinates and write to file
 
-              fid.write(str(x)+' '+str(y)+' '+str(z)+'\n')
+	    theta=theta*np.pi/180.0
+	    phi=phi*np.pi/180.0
+
+	    r=self.m[n].r[k]
+	    x=r*np.sin(theta)*np.cos(phi);
+            y=r*np.sin(theta)*np.sin(phi);
+            z=r*np.cos(theta);
+
+	    fid.write(str(x)+' '+str(y)+' '+str(z)+'\n')
 
     #- write connectivity
 
@@ -762,22 +787,22 @@ class ses3d_model(object):
     for n in np.arange(self.nsubvol):
 
       if verbose==True:
-        print 'writing conectivity for subvolume '+str(n)
+	print 'writing conectivity for subvolume '+str(n)
 
       for i in np.arange(1,nx[n]):
-        for j in np.arange(1,ny[n]):
-          for k in np.arange(1,nz[n]):
+	for j in np.arange(1,ny[n]):
+	  for k in np.arange(1,nz[n]):
+								# i j k
+	    a=count+k+(j-1)*nz[n]+(i-1)*ny[n]*nz[n]-1     	# 0 0 0
+	    b=count+k+(j-1)*nz[n]+(i-1)*ny[n]*nz[n]       	# 0 0 1
+	    c=count+k+(j)*nz[n]+(i-1)*ny[n]*nz[n]-1       	# 0 1 0
+	    d=count+k+(j)*nz[n]+(i-1)*ny[n]*nz[n]         	# 0 1 1
+	    e=count+k+(j-1)*nz[n]+(i)*ny[n]*nz[n]-1       	# 1 0 0
+	    f=count+k+(j-1)*nz[n]+(i)*ny[n]*nz[n]         	# 1 0 1
+	    g=count+k+(j)*nz[n]+(i)*ny[n]*nz[n]-1         	# 1 1 0
+	    h=count+k+(j)*nz[n]+(i)*ny[n]*nz[n]           	# 1 1 1
 
-            a=count+k+(j-1)*nz[n]+(i-1)*ny[n]*nz[n]-1
-            b=count+k+(j-1)*nz[n]+(i-1)*ny[n]*nz[n] 
-            c=count+k+(j)*nz[n]+(i-1)*ny[n]*nz[n]-1
-            d=count+k+(j)*nz[n]+(i-1)*ny[n]*nz[n]
-            e=count+k+(j-1)*nz[n]+(i)*ny[n]*nz[n]-1
-            f=count+k+(j-1)*nz[n]+(i)*ny[n]*nz[n]
-            g=count+k+(j)*nz[n]+(i)*ny[n]*nz[n]-1
-            h=count+k+(j)*nz[n]+(i)*ny[n]*nz[n]
-
-            fid.write('8 '+str(a)+' '+str(b)+' '+str(c)+' '+str(d)+' '+str(e)+' '+str(f)+' '+str(g)+' '+str(h)+'\n')
+	    fid.write('8 '+str(a)+' '+str(b)+' '+str(c)+' '+str(d)+' '+str(e)+' '+str(f)+' '+str(g)+' '+str(h)+'\n')
 
       count=count+nx[n]*ny[n]*nz[n]
 
@@ -789,13 +814,13 @@ class ses3d_model(object):
     for n in np.arange(self.nsubvol):
 
       if verbose==True:
-        print 'writing cell types for subvolume '+str(n)
+	print 'writing cell types for subvolume '+str(n)
 
       for i in np.arange(nx[n]-1):
-        for j in np.arange(ny[n]-1):
-          for k in np.arange(nz[n]-1):
+	for j in np.arange(ny[n]-1):
+	  for k in np.arange(nz[n]-1):
 
-            fid.write('11\n')
+	    fid.write('11\n')
 
     #- write data
 
@@ -807,7 +832,7 @@ class ses3d_model(object):
     for n in np.arange(self.nsubvol):
 
       if verbose==True:
-        print 'writing data for subvolume '+str(n)
+	print 'writing data for subvolume '+str(n)
 
       idx=np.arange(nx[n])
       idx[nx[n]-1]=nx[n]-2
@@ -819,10 +844,10 @@ class ses3d_model(object):
       idz[nz[n]-1]=nz[n]-2
 
       for i in idx:
-        for j in idy:
-          for k in idz:
+	for j in idy:
+	  for k in idz:
 
-            fid.write(str(self.m[n].v[i,j,k])+'\n')
+	    fid.write(str(self.m[n].v[i,j,k])+'\n')
 
     #- clean up
 
@@ -857,7 +882,7 @@ class ses3d_model(object):
       m.drawparallels(np.arange(-80.0,80.0,10.0),labels=[1,0,0,1])
       m.drawmeridians(np.arange(-170.0,170.0,10.0),labels=[1,0,0,1])
 
-    m.drawcoastlines(linewidth=3.0)
+    m.drawcoastlines()
     m.drawcountries()
 
     m.drawmapboundary(fill_color=[1.0,1.0,1.0])
@@ -876,9 +901,6 @@ class ses3d_model(object):
 
     for k in np.arange(self.nsubvol):
 
-      nx=len(self.m[k].lat)
-      ny=len(self.m[k].lon)
-
       r=self.m[k].r
 
       #- collect subvolumes within target depth
@@ -895,7 +917,7 @@ class ses3d_model(object):
         if verbose==True:
           print 'true plotting depth: '+str(6371.0-r[idz])+' km'
 
-        x,y=m(self.m[k].lon_rot[0:nx-1,0:ny-1],self.m[k].lat_rot[0:nx-1,0:ny-1])
+        x,y=m(self.m[k].lon_rot,self.m[k].lat_rot)
         x_list.append(x)
         y_list.append(y)
 
@@ -937,17 +959,10 @@ class ses3d_model(object):
 
     for k in np.arange(len(N_list)):
       im=m.pcolor(x_list[k],y_list[k],self.m[N_list[k]].v[:,:,idz_list[k]],cmap=my_colormap,vmin=min_val_plot,vmax=max_val_plot)
-      
-      #if colormap=='mono':
-        #cs=m.contour(x_list[k],y_list[k],self.m[N_list[k]].v[:,:,idz_list[k]], colors='r',linewidths=1.0)
-        #plt.clabel(cs,colors='r')
-        
 
-    #- make a colorbar and title ------------------------------------------
     m.colorbar(im,"right", size="3%", pad='2%')
     plt.title(str(depth)+' km')
     
-    #- save image if wanted -----------------------------------------------
     if save_under is None:
       plt.show()
     else:
