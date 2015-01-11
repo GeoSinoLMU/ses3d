@@ -11,7 +11,6 @@ import Q_models as q
 #########################################################################
 #- define submodel model class
 #########################################################################
-
 class ses3d_submodel(object):
   """ class defining an ses3d submodel
   """
@@ -34,7 +33,6 @@ class ses3d_submodel(object):
 #########################################################################
 #- define ses3d model class
 #########################################################################
-
 class ses3d_model(object):
   """ class for reading, writing, plotting and manipulating and ses3d model
   """
@@ -68,7 +66,6 @@ class ses3d_model(object):
   #########################################################################
   #- copy models
   #########################################################################
-
   def copy(self):
     """ Copy a model
     """
@@ -112,7 +109,6 @@ class ses3d_model(object):
   #########################################################################
   #- multiplication with a scalar
   #########################################################################
-
   def __rmul__(self,factor):
     """ override left-multiplication of an ses3d model by a scalar factor
     """
@@ -156,7 +152,6 @@ class ses3d_model(object):
   #########################################################################
   #- adding two models
   #########################################################################
-
   def __add__(self,other_model):
     """ override addition of two ses3d models
     """
@@ -197,7 +192,6 @@ class ses3d_model(object):
   #########################################################################
   #- read a 3D model
   #########################################################################
-
   def read(self,directory,filename,verbose=False):
     """ read an ses3d model from a file
 
@@ -323,7 +317,6 @@ class ses3d_model(object):
   #########################################################################
   #- write a 3D model to a file
   #########################################################################
-
   def write(self,directory,filename,verbose=False):
     """ write ses3d model to a file
 
@@ -353,10 +346,10 @@ class ses3d_model(object):
 
     fid_m.close()
 
+
   #########################################################################
   #- Compute the L2 norm.
   #########################################################################
-
   def norm(self):
 
     N=0.0
@@ -391,10 +384,10 @@ class ses3d_model(object):
     #- Finish. ------------------------------------------------------------
     return np.sqrt(N)
 
+
   #########################################################################
   #- Remove the upper percentiles of a model.
   #########################################################################
-
   def clip_percentile(self,percentile):
     """
     Clip the upper percentiles of the model. Particularly useful to remove the singularities in sensitivity kernels.
@@ -418,7 +411,6 @@ class ses3d_model(object):
   #########################################################################
   #- Apply horizontal smoothing.
   #########################################################################
-
   def smooth_horizontal(self,sigma,filter_type='gauss'):
     """
     smooth_horizontal(self,sigma,filter='gauss')
@@ -517,7 +509,6 @@ class ses3d_model(object):
   #########################################################################
   #- Apply horizontal smoothing with adaptive smoothing length.
   #########################################################################
-
   def smooth_horizontal_adaptive(self,sigma):
     
     #- Find maximum smoothing length. -------------------------------------
@@ -603,7 +594,6 @@ class ses3d_model(object):
   #########################################################################
   #- Compute velocity at 1 s from relaxed velocities
   #########################################################################
-
   def relax2ref(self, qmodel='cem', nrelax=3, f_intermediate=0.1):
     """
     Compute velocities at the reference frequency of 1 Hz. This is done in two stages:
@@ -707,11 +697,10 @@ class ses3d_model(object):
   #########################################################################
   #- convert to vtk format
   #########################################################################
-
-  def convert_to_vtk(self,directory,filename,verbose=False):
+  def convert_to_vtk(self,directory,filename,verbose=False,tag='scalars'):
     """ convert ses3d model to vtk format for plotting with Paraview
 
-    convert_to_vtk(self,directory,filename,verbose=False):
+    convert_to_vtk(self,directory,filename,verbose=False,tag='scalars'):
     """
 
     #- preparatory steps
@@ -826,7 +815,8 @@ class ses3d_model(object):
 
     fid.write('\n')
     fid.write('POINT_DATA '+str(N)+'\n')
-    fid.write('SCALARS scalars float\n')
+    fid.write('SCALARS '+tag+' float\n')
+    #fid.write('SCALARS scalars float\n')
     fid.write('LOOKUP_TABLE mytable\n')
 
     for n in np.arange(self.nsubvol):
@@ -853,10 +843,10 @@ class ses3d_model(object):
 
     fid.close()
 
+
   #########################################################################
   #- plot horizontal slices
   #########################################################################
-
   def plot_slice(self,depth,min_val_plot=None,max_val_plot=None,colormap='tomo',res='i',save_under=None,verbose=False):
     """ plot horizontal slices through an ses3d model
 
@@ -969,10 +959,10 @@ class ses3d_model(object):
       plt.savefig(save_under+'.png', format='png', dpi=200)
       plt.close()
 
+
   #########################################################################
   #- plot depth to a certain threshold value
   #########################################################################
-
   def plot_threshold(self,val,min_val_plot,max_val_plot,colormap='tomo',verbose=False):
     """ plot depth to a certain threshold value 'val' in an ses3d model
 
@@ -1051,3 +1041,127 @@ class ses3d_model(object):
     m.colorbar(im,"right", size="3%", pad='2%')
     plt.title('depth to '+str(val)+' km/s [km]')
     plt.show()
+
+
+  #########################################################################
+  #- Compute correlation lengths
+  #########################################################################
+  def correlation_length(self,width=30,subvol=0,direction='lat'):
+
+    #- Initialisations. ---------------------------------------------------
+
+    #- Array sizes.
+    nlat=len(self.m[subvol].lat)-1
+    nlon=len(self.m[subvol].lon)-1
+    nr=len(self.m[subvol].r)-1
+
+    #- Resolution length field. 
+    L=ses3d_model()
+
+    L.nsubvol=self.nsubvol
+    L.lat_min=self.lat_min
+    L.lat_max=self.lat_max
+    L.lon_min=self.lon_min
+    L.lon_max=self.lon_max
+    L.lat_centre=self.lat_centre
+    L.lon_centre=self.lon_centre
+    L.phi=self.phi
+    L.n=self.n
+    L.global_regional=self.global_regional
+    L.d_lon=self.d_lon
+    L.d_lat=self.d_lat
+
+    for k in np.arange(self.nsubvol):
+
+      sub=ses3d_submodel()
+
+      sub.lat=self.m[k].lat
+      sub.lon=self.m[k].lon
+      sub.r=self.m[k].r
+
+      sub.lat_rot=self.m[k].lat_rot
+      sub.lon_rot=self.m[k].lon_rot
+      
+      sub.v=np.zeros(np.shape(self.m[k].v))
+
+      L.m.append(sub)
+
+
+    #- Loop through depth levels. -----------------------------------------
+    for idz in np.arange(nr):
+
+      #- Increments.
+      dlat=np.abs(self.m[subvol].lat[1]-self.m[subvol].lat[0])*self.m[subvol].r[idz]*np.pi/180.0
+      dlon=np.abs(self.m[subvol].lon[1]-self.m[subvol].lon[0])*self.m[subvol].r[idz]*np.pi/180.0
+      dr=np.abs(self.m[subvol].r[1]-self.m[subvol].r[0])
+
+      #--------------------------------------------------------------------
+      #- Compute correlation length field in latitude direction. ----------
+      #--------------------------------------------------------------------
+
+      if direction=='lat':
+
+        line=np.arange(-width,width+1)*dlat
+
+        #- March through the grid points. ---------------------------------
+        for i in np.arange(2*width,nlat-2*width):
+          for j in np.arange(nlon):
+
+            #- Compute correlation function at the grid point.
+            c=np.zeros(len(line))
+            for n in np.arange(-width,width):
+              c[n+width]=np.sum(self.m[subvol].v[(i-width):(i+width),j,idz]*self.m[subvol].v[(i-width+n):(i+width+n),j,idz])
+
+            #- Measure (1/e)-width of the peak (standard deviation).
+            idx=np.flatnonzero( min(np.abs(c-0.78*max(c))) == np.abs(c-0.78*max(c)) )
+            idx=min(np.abs(idx-width))+width
+            L.m[subvol].v[i,j,idz]=line[idx]
+
+      #--------------------------------------------------------------------
+      #- Compute correlation length field in latitude direction. ----------
+      #--------------------------------------------------------------------  
+
+      elif direction=='lon':
+
+        line=np.arange(-width,width+1)*dlon
+
+        #- March through the grid points. ---------------------------------
+        for j in np.arange(2*width,nlon-2*width):
+          for i in np.arange(nlat):
+
+            #- Compute correlation function at the grid point.
+            c=np.zeros(len(line))
+            for n in np.arange(-width,width):
+              c[n+width]=np.sum(self.m[subvol].v[i,(j-width):(j+width),idz]*self.m[subvol].v[i,(j-width+n):(j+width+n),idz])
+
+            #- Measure (1/e)-width of the peak (standard deviation).
+            idy=np.flatnonzero( min(np.abs(c-0.78*max(c))) == np.abs(c-0.78*max(c)) )
+            idy=min(np.abs(idy-width))+width
+            L.m[subvol].v[i,j,idz]=np.cos(np.pi*self.m[subvol].lat[i]/180.0)*line[idy]
+
+      #--------------------------------------------------------------------
+      #- Compute correlation length field in radial direction. ------------
+      #-------------------------------------------------------------------- 
+
+      elif (direction=='r') & (idz>2*width) & (idz<nr-2*width):
+
+        line=np.arange(-width,width+1)*dr
+
+        #- March through the grid points. ---------------------------------
+        for i in np.arange(nlat):
+          for j in np.arange(nlon):
+
+            #- Compute correlation function at the grid point.
+            c=np.zeros(len(line))
+            for n in np.arange(-width,width):
+              c[n+width]=np.sum(self.m[subvol].v[i,j,(idz-width):(idz+width)]*self.m[subvol].v[i,j,(idz-width+n):(idz+width+n)])
+
+            #- Measure (1/e)-width of the peak (standard deviation).
+            k=np.flatnonzero( min(np.abs(c-0.78*max(c))) == np.abs(c-0.78*max(c)) )
+            k=min(np.abs(k-width))+width
+            L.m[subvol].v[i,j,idz]=line[k]
+
+
+
+    return L
+
