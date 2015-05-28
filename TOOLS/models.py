@@ -592,6 +592,110 @@ class ses3d_model(object):
 
 
   #########################################################################
+  #- Compute relaxed velocity from velocity at reference period 1 s
+  #########################################################################
+  def ref2relax(self, qmodel='prem_s', nrelax=3, f_intermediate=0.1):
+    """
+    Compute relaxed velocity from velocity at reference period 1 s. This is done in two stages:
+
+    Stage 1 takes the continuous absorption band model and translates to an intermediate
+    frequency inside the numerical absorption band.
+
+    Stage 2 then takes the numerical absorption band and goes to the relaxed velocity.
+
+    """
+
+    #- Stage 1: From reference frequency to intermediate frequency. -------
+
+    #- Loop over subvolumes. 
+
+    for k in np.arange(self.nsubvol):
+
+      nx=len(self.m[k].lat)-1
+      ny=len(self.m[k].lon)-1
+      nz=len(self.m[k].r)-1
+
+      #- Loop over radius within the subvolume.
+      for idz in np.arange(nz):
+
+        #- Compute Q. 
+        if qmodel=='cem':
+          Q=q.q_cem(self.m[k].r[idz])
+        elif qmodel=='ql6':
+          Q=q.q_ql6(self.m[k].r[idz])
+        elif qmodel=='prem_s':
+          Q=q.qs_prem(self.m[k].r[idz])
+        elif qmodel=='prem_p':
+          Q=q.qp_prem(self.m[k].r[idz])
+
+        #- Conversion factor.
+
+        conversion_factor=1.0+np.log(f_intermediate)/(np.pi*Q)
+
+        #- Correct velocities.
+
+        self.m[k].v[:,:,idz]=conversion_factor*self.m[k].v[:,:,idz]
+
+    #- Stage 2: From intermediate to relaxed. -----------------------------
+
+    #- Read the relaxation parameters from the relax file.
+
+    tau_p=np.zeros(nrelax)
+    D_p=np.zeros(nrelax)
+
+    fid=open('../INPUT/relax','r')
+    
+    fid.readline()
+    
+    for n in range(nrelax):
+      tau_p[n]=float(fid.readline().strip())
+
+    fid.readline()
+
+    for n in range(nrelax):
+      D_p[n]=float(fid.readline().strip())
+
+    fid.close()
+
+    #- Loop over subvolumes. 
+
+    for k in np.arange(self.nsubvol):
+
+      nx=len(self.m[k].lat)-1
+      ny=len(self.m[k].lon)-1
+      nz=len(self.m[k].r)-1
+
+      #- Loop over radius within the subvolume.
+      for idz in np.arange(nz):
+
+        #- Compute Q. 
+        if qmodel=='cem':
+          Q=q.q_cem(self.m[k].r[idz])
+        elif qmodel=='ql6':
+          Q=q.q_ql6(self.m[k].r[idz])
+        elif qmodel=='prem':
+          Q=q.q_prem(self.m[k].r[idz])
+
+        #- Compute A and B for the intermediate frequency of 1 Hz.
+
+        A=1.0
+        B=0.0
+        w=2.0*np.pi*f_intermediate
+
+        tau=1.0/Q
+
+        for n in range(nrelax):
+          A+=tau*D_p[n]*(w**2)*(tau_p[n]**2)/(1.0+(w**2)*(tau_p[n]**2))
+          B+=tau*D_p[n]*w*tau_p[n]/(1.0+(w**2)*(tau_p[n]**2))
+
+        conversion_factor=2.0*(A**2+B**2)/(A+np.sqrt(A**2+B**2))
+        conversion_factor=np.sqrt(1.0/conversion_factor)
+
+        #- Correct velocities.
+
+        self.m[k].v[:,:,idz]=conversion_factor*self.m[k].v[:,:,idz]
+
+  #########################################################################
   #- Compute velocity at 1 s from relaxed velocities
   #########################################################################
   def relax2ref(self, qmodel='cem', nrelax=3, f_intermediate=0.1):
@@ -664,34 +768,34 @@ class ses3d_model(object):
 
         self.m[k].v[:,:,idz]=conversion_factor*self.m[k].v[:,:,idz]
 
-      #- Stage 2: From intermediate frequency to reference frequency. -----
+    #- Stage 2: From intermediate frequency to reference frequency. -----
 
-      #- Loop over subvolumes. 
+    #- Loop over subvolumes. 
 
-      for k in np.arange(self.nsubvol):
+    for k in np.arange(self.nsubvol):
 
-        nx=len(self.m[k].lat)-1
-        ny=len(self.m[k].lon)-1
-        nz=len(self.m[k].r)-1
+      nx=len(self.m[k].lat)-1
+      ny=len(self.m[k].lon)-1
+      nz=len(self.m[k].r)-1
 
-        #- Loop over radius within the subvolume.
-        for idz in np.arange(nz):
+      #- Loop over radius within the subvolume.
+      for idz in np.arange(nz):
 
-          #- Compute Q. 
-          if qmodel=='cem':
-            Q=q.q_cem(self.m[k].r[idz])
-          elif qmodel=='ql6':
-            Q=q.q_ql6(self.m[k].r[idz])
-          elif qmodel=='prem':
-            Q=q.q_prem(self.m[k].r[idz])
+        #- Compute Q. 
+        if qmodel=='cem':
+          Q=q.q_cem(self.m[k].r[idz])
+        elif qmodel=='ql6':
+          Q=q.q_ql6(self.m[k].r[idz])
+        elif qmodel=='prem':
+          Q=q.q_prem(self.m[k].r[idz])
 
-          #- Conversion factor.
+        #- Conversion factor.
 
-          conversion_factor=1.0+np.log(1.0/f_intermediate)/(np.pi*Q)
+        conversion_factor=1.0+np.log(1.0/f_intermediate)/(np.pi*Q)
 
-          #- Correct velocities.
+        #- Correct velocities.
 
-          self.m[k].v[:,:,idz]=conversion_factor*self.m[k].v[:,:,idz]
+        self.m[k].v[:,:,idz]=conversion_factor*self.m[k].v[:,:,idz]
 
 
   #########################################################################
